@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { X, Check, RotateCcw, ArrowRight, Keyboard } from "lucide-react";
-import { resolveBeetle, type BeetleRow, type Status } from "@/lib/logic";
+import { resolveBeetle, type BeetleRow, type Status, type MarkedSets } from "@/lib/logic";
 import { DATA } from "@/lib/data";
 import { cn, formatSpecies } from "@/lib/utils";
 import { type Translations } from "@/lib/i18n";
@@ -59,13 +59,14 @@ const C = {
 };
 
 interface Props {
-  marked: Set<number>;
-  onMark: (id: number) => void;
+  marked: MarkedSets;
+  onMarkFisio: (id: number) => void;
+  onMarkBoth: (id: number) => void;
   onUnmark: (id: number) => void;
   t: Translations;
 }
 
-export function LookupTab({ marked, onMark, onUnmark, t }: Props) {
+export function LookupTab({ marked, onMarkFisio, onMarkBoth, onUnmark, t }: Props) {
   const [query, setQuery]     = useState("");
   const [result, setResult]   = useState<BeetleRow | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -83,31 +84,42 @@ export function LookupTab({ marked, onMark, onUnmark, t }: Props) {
   // Re-resolve on mark/unmark
   useEffect(() => { if (query.trim()) lookup(query); }, [marked, lookup, query]);
 
-  // Keyboard: Enter = mark, Escape = clear
+  // Keyboard: Enter = markBoth (default), Escape = clear
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") { setQuery(""); setResult(null); setNotFound(false); inputRef.current?.focus(); }
       if (e.key === "Enter" && result && !result.photographed) {
-        onMark(result.id);
+        // Enter always marks as both (fuller action) unless only fisio is possible
+        if (result.status === "fisio") onMarkFisio(result.id);
+        else onMarkBoth(result.id);
         setJustMarked(true);
         setTimeout(() => setJustMarked(false), 1500);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [result, onMark]);
+  }, [result, onMarkFisio, onMarkBoth]);
 
-  function doMark() {
+  function doMarkFisio() {
     if (!result) return;
-    onMark(result.id);
+    onMarkFisio(result.id);
     setJustMarked(true);
     setTimeout(() => setJustMarked(false), 1500);
   }
 
-  // Next unphoto of same species
+  function doMarkBoth() {
+    if (!result) return;
+    onMarkBoth(result.id);
+    setJustMarked(true);
+    setTimeout(() => setJustMarked(false), 1500);
+  }
+
+  // Next beetle in same species not yet photographed for funcional purposes
   const nextInSp: number | null = result
     ? DATA.species[result.sp].ids.find(
-        (bid) => bid !== result.id && !((DATA.beetles[String(bid)]?.prePhotographed ?? false) || marked.has(bid))
+        (bid) => bid !== result.id &&
+          !(DATA.beetles[String(bid)]?.prePhotographed ?? false) &&
+          !marked.both.has(bid)
       ) ?? null
     : null;
 
@@ -342,7 +354,7 @@ export function LookupTab({ marked, onMark, onUnmark, t }: Props) {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm font-semibold text-[#0a0a0a]">
                         <Check size={14} className="text-emerald-500" />
-                        {t.markedLabel}
+                        {result.markedAsFisio ? t.markedLabelFisio : t.markedLabelBoth}
                       </div>
                       <button
                         onClick={() => onUnmark(result.id)}
@@ -352,9 +364,27 @@ export function LookupTab({ marked, onMark, onUnmark, t }: Props) {
                         {t.undoBtn}
                       </button>
                     </div>
+                  ) : result.status === "both" ? (
+                    /* Two buttons: user chooses if this beetle serves for funcional or not */
+                    <div className="flex gap-2">
+                      <button
+                        onClick={doMarkFisio}
+                        className="flex-1 flex items-center justify-center gap-2 text-white text-sm font-semibold py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 transition-all active:scale-[0.98]"
+                      >
+                        <Check size={15} />
+                        {t.markBtnFisioOnly}
+                      </button>
+                      <button
+                        onClick={doMarkBoth}
+                        className="flex-1 flex items-center justify-center gap-2 text-white text-sm font-semibold py-3 rounded-xl bg-[#0a0a0a] hover:bg-[#222] transition-all active:scale-[0.98]"
+                      >
+                        <Check size={15} />
+                        {t.markBtnFisioBoth}
+                      </button>
+                    </div>
                   ) : (
                     <button
-                      onClick={doMark}
+                      onClick={result.status === "fisio" ? doMarkFisio : doMarkBoth}
                       className={cn(
                         "w-full flex items-center justify-center gap-2 text-white text-sm font-semibold py-3 rounded-xl transition-all active:scale-[0.98]",
                         justMarked ? "bg-emerald-500" :
@@ -364,7 +394,8 @@ export function LookupTab({ marked, onMark, onUnmark, t }: Props) {
                       )}
                     >
                       <Check size={15} />
-                      {justMarked ? t.markedLabel : t.markBtn}
+                      {justMarked ? t.markedLabel :
+                       result.status === "fisio" ? t.markBtnFisioOnly : t.markBtnFisioBoth}
                     </button>
                   )}
                 </div>

@@ -6,21 +6,33 @@ import { SpeciesTab } from "./SpeciesTab";
 import { TableTab }   from "./TableTab";
 import { T, type Lang } from "@/lib/i18n";
 import { DATA } from "@/lib/data";
-import { computeGlobalStats } from "@/lib/logic";
+import { computeGlobalStats, type MarkedSets } from "@/lib/logic";
 import { cn } from "@/lib/utils";
 
-const LS_MARKED = "beetle_photographed_v1";
-const LS_LANG   = "beetle_lang_v1";
+const LS_LANG      = "beetle_lang_v1";
+const LS_MARKED_V1 = "beetle_photographed_v1"; // legacy key for migration
+const LS_FISIO     = "beetle_marked_fisio_v2";
+const LS_BOTH      = "beetle_marked_both_v2";
 
-function loadMarked(): Set<number> {
-  if (typeof window === "undefined") return new Set();
+function loadMarkedSets(): MarkedSets {
+  if (typeof window === "undefined") return { fisio: new Set(), both: new Set() };
   try {
-    const raw = localStorage.getItem(LS_MARKED);
-    return raw ? new Set(JSON.parse(raw) as number[]) : new Set();
-  } catch { return new Set(); }
+    const rawFisio = localStorage.getItem(LS_FISIO);
+    const rawBoth  = localStorage.getItem(LS_BOTH);
+    if (rawFisio !== null || rawBoth !== null) {
+      return {
+        fisio: rawFisio ? new Set(JSON.parse(rawFisio) as number[]) : new Set(),
+        both:  rawBoth  ? new Set(JSON.parse(rawBoth)  as number[]) : new Set(),
+      };
+    }
+    // Migrate v1 marks → treat as "both"
+    const rawV1 = localStorage.getItem(LS_MARKED_V1);
+    return { fisio: new Set(), both: rawV1 ? new Set(JSON.parse(rawV1) as number[]) : new Set() };
+  } catch { return { fisio: new Set(), both: new Set() }; }
 }
-function saveMarked(ids: Set<number>) {
-  localStorage.setItem(LS_MARKED, JSON.stringify([...ids]));
+function saveMarkedSets(sets: MarkedSets) {
+  localStorage.setItem(LS_FISIO, JSON.stringify([...sets.fisio]));
+  localStorage.setItem(LS_BOTH,  JSON.stringify([...sets.both]));
 }
 
 type Tab = "lookup" | "species" | "table";
@@ -28,23 +40,40 @@ type Tab = "lookup" | "species" | "table";
 export function BeetleApp() {
   const [lang, setLang]         = useState<Lang>("pt");
   const [tab, setTab]           = useState<Tab>("lookup");
-  const [marked, setMarked]     = useState<Set<number>>(new Set());
-  const [hydrated, setHydrated] = useState(false);
+  const [markedSets, setMarkedSets] = useState<MarkedSets>({ fisio: new Set(), both: new Set() });
+  const [hydrated, setHydrated]     = useState(false);
 
   const t = T[lang];
 
   useEffect(() => {
-    setMarked(loadMarked());
+    setMarkedSets(loadMarkedSets());
     const l = localStorage.getItem(LS_LANG) as Lang | null;
     if (l === "pt" || l === "es") setLang(l);
     setHydrated(true);
   }, []);
 
-  function mark(id: number)   { setMarked((p) => { const n = new Set(p); n.add(id);    saveMarked(n); return n; }); }
-  function unmark(id: number) { setMarked((p) => { const n = new Set(p); n.delete(id); saveMarked(n); return n; }); }
+  function markFisio(id: number) {
+    setMarkedSets((prev) => {
+      const fisio = new Set(prev.fisio); fisio.add(id);
+      const next = { ...prev, fisio }; saveMarkedSets(next); return next;
+    });
+  }
+  function markBoth(id: number) {
+    setMarkedSets((prev) => {
+      const both = new Set(prev.both); both.add(id);
+      const next = { ...prev, both }; saveMarkedSets(next); return next;
+    });
+  }
+  function unmark(id: number) {
+    setMarkedSets((prev) => {
+      const fisio = new Set(prev.fisio); fisio.delete(id);
+      const both  = new Set(prev.both);  both.delete(id);
+      const next = { fisio, both }; saveMarkedSets(next); return next;
+    });
+  }
   function toggleLang(l: Lang) { setLang(l); localStorage.setItem(LS_LANG, l); }
 
-  const stats = useMemo(() => computeGlobalStats(marked), [marked]);
+  const stats = useMemo(() => computeGlobalStats(markedSets), [markedSets]);
 
   const TABS: { key: Tab; label: string }[] = [
     { key: "lookup",  label: t.tabLookup },
@@ -116,12 +145,12 @@ export function BeetleApp() {
       <main className="flex-1 max-w-3xl mx-auto w-full px-5 py-8">
         {tab === "lookup" && (
           <div className="max-w-xl mx-auto">
-            <LookupTab marked={marked} onMark={mark} onUnmark={unmark} t={t} />
+            <LookupTab marked={markedSets} onMarkFisio={markFisio} onMarkBoth={markBoth} onUnmark={unmark} t={t} />
           </div>
         )}
-        {tab === "species" && <SpeciesTab marked={marked} t={t} />}
+        {tab === "species" && <SpeciesTab marked={markedSets} t={t} />}
         {tab === "table"}
-        {tab === "table"  && <TableTab  marked={marked} onMark={mark} onUnmark={unmark} t={t} />}
+        {tab === "table"  && <TableTab  marked={markedSets} onMarkFisio={markFisio} onMarkBoth={markBoth} onUnmark={unmark} t={t} />}
       </main>
 
       {/* Footer */}

@@ -2,13 +2,14 @@
 
 import { useState, useMemo } from "react";
 import { Check, X, Search, ChevronUp, ChevronDown } from "lucide-react";
-import { computeAllRows, type BeetleRow, type Status } from "@/lib/logic";
+import { computeAllRows, type BeetleRow, type Status, type MarkedSets } from "@/lib/logic";
 import { cn, formatSpecies } from "@/lib/utils";
 import { type Translations } from "@/lib/i18n";
 
 interface Props {
-  marked: Set<number>;
-  onMark: (id: number) => void;
+  marked: MarkedSets;
+  onMarkFisio: (id: number) => void;
+  onMarkBoth: (id: number) => void;
   onUnmark: (id: number) => void;
   t: Translations;
 }
@@ -24,7 +25,7 @@ const STATUS_BADGE: Record<Status, { label: string; cls: string }> = {
   none:  { label: "—",            cls: "text-[#ccc]" },
 };
 
-export function TableTab({ marked, onMark, onUnmark, t }: Props) {
+export function TableTab({ marked, onMarkFisio, onMarkBoth, onUnmark, t }: Props) {
   const [filter, setFilter]   = useState<FilterKey>("all");
   const [spFilter, setSpFilter] = useState<string>("all");
   const [search, setSearch]   = useState("");
@@ -190,10 +191,28 @@ export function TableTab({ marked, onMark, onUnmark, t }: Props) {
                             className="inline-flex items-center gap-1 text-xs text-[#aaa] hover:text-red-500 border border-[#e5e5e5] hover:border-red-200 px-2.5 py-1 rounded-lg transition-colors">
                             <X size={10} />{t.tblActionRemove}
                           </button>
+                        ) : row.status === "both" ? (
+                          <div className="inline-flex gap-1">
+                            <button onClick={() => onMarkFisio(row.id)}
+                              className="inline-flex items-center gap-1 text-xs text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded-lg transition-colors">
+                              <Check size={10} />{t.tblActionMarkFisio}
+                            </button>
+                            <button onClick={() => onMarkBoth(row.id)}
+                              className="inline-flex items-center gap-1 text-xs text-white bg-[#0a0a0a] hover:bg-[#333] px-2.5 py-1 rounded-lg transition-colors">
+                              <Check size={10} />{t.tblActionMarkBoth}
+                            </button>
+                          </div>
                         ) : (
-                          <button onClick={() => onMark(row.id)}
-                            className="inline-flex items-center gap-1 text-xs text-[#555] hover:bg-[#0a0a0a] hover:text-white border border-[#e5e5e5] hover:border-[#0a0a0a] px-2.5 py-1 rounded-lg transition-colors">
-                            <Check size={10} />{t.tblActionMark}
+                          <button
+                            onClick={() => row.status === "fisio" ? onMarkFisio(row.id) : onMarkBoth(row.id)}
+                            className={cn(
+                              "inline-flex items-center gap-1 text-xs text-white px-2.5 py-1 rounded-lg transition-colors",
+                              row.status === "fisio"
+                                ? "bg-emerald-600 hover:bg-emerald-700"
+                                : "bg-blue-600 hover:bg-blue-700"
+                            )}>
+                            <Check size={10} />
+                            {row.status === "fisio" ? t.tblActionMarkFisio : t.tblActionMarkBoth}
                           </button>
                         )}
                       </td>

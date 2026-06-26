@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { computeAllSpeciesStats } from "@/lib/logic";
+import { computeAllSpeciesStats, type MarkedSets } from "@/lib/logic";
 import { cn, formatSpecies } from "@/lib/utils";
 import { type Translations } from "@/lib/i18n";
 
 interface Props {
-  marked: Set<number>;
+  marked: MarkedSets;
   t: Translations;
 }
 
